@@ -44,10 +44,28 @@ void print_double_array(double *array, int size, char *format, bool all) {
     printf("\n");
 }
 
-double calc_max_pr(int *stream, int size) {
-    int qCnt = 0, i = 0, j = 0, procPos = 0, cnt = 0;
-    int *chSet = (int*) calloc(size, sizeof(int));
-    int *stat = (int*) calloc(size, sizeof(int));
+int countElementInArray(int *array, int size, int element) {
+    int cnt = 0, i = 0;
+    for (i = 0; i < size; i++) {
+        if (element == array[i]) {
+            cnt++;
+        }
+    }
+    return cnt;
+}
+
+int findElementInArray(int *array, int size, int element) {
+    int j = 0;
+    while (j < size && element != array[j]) {
+      j++;
+    }
+    return j;
+}
+
+double calcKeyBytes(int *stream, int size) {
+    int i = 0, k = 0, cnt = 0;
+    int *setVal = (int*) calloc(size, sizeof(int));
+    int *setCnt = (int*) calloc(size, sizeof(int));
     double alphabetFrequency[256] = {};
     alphabetFrequency[97]  = 0.08167;
     alphabetFrequency[98]  = 0.01492;
@@ -78,41 +96,33 @@ double calc_max_pr(int *stream, int size) {
     double pr = 0.0;
     for (i = 0; i < size; i++) {
         if (stream[i]< 97 || stream[i]> 122) {
-            printf("%c [ %3d ]", stream[i], stream[i]);
             continue;
         }
         cnt++;
-        if (procPos > 0) {
-            j = 0;
-            while (j < procPos && stream[i]!= chSet[j]) {
-              j++;
-            }
-            if (j < procPos) {
-                continue;
-            }
+        if (k > 0 && findElementInArray(setVal, k, stream[i]) < k) {
+            continue;
         }
-        qCnt = 0;
-        for (j = 0; j < size; j++) {
-            if (stream[j] == stream[i]) {
-                qCnt++;
-            }
-        }
-        chSet[procPos] = stream[i];
-        stat[procPos] = qCnt;
-        procPos++;
-        printf("%c[%3d]: %d / %d - %5.3f\n", stream[i], stream[i], qCnt, size, pr);
+        setVal[k] = stream[i];
+        setCnt[k] = countElementInArray(stream, size, stream[i]);
+        k++;
     }
-    for (i = 0; i < procPos; i++) {
-        pr += (double) stat[i] / cnt * alphabetFrequency[chSet[i]];
-        printf("%c[%3d]: %d / %d = %4.5f (%4.5f) - %5.5f\n", chSet[i], chSet[i], stat[i], cnt, (double) stat[i] / cnt, alphabetFrequency[chSet[i]], pr);
+    if (k == 0) {
+        return 0.0;
     }
-    free(stat);
-    free(chSet);
+    print_int_array(stream, size, "%3d ", false);
+    print_int_array(setCnt, size, "%3d ", false);
+    print_int_array(setVal, size, "%3c ", false);
+    for (i = 0; i < k; i++) {
+        pr += (double) setCnt[i] / cnt * alphabetFrequency[setVal[i]];
+        printf("%c[%3d]: %d / %d = %4.5f (%4.5f) - %5.5f\n", setVal[i], setVal[i], setCnt[i], cnt, (double) setCnt[i] / cnt, alphabetFrequency[setVal[i]], pr);
+    }
+    free(setVal);
+    free(setCnt);
     return pr;
 }
 
 double calcKeyLengthProb(int *stream, int size) {
-    int i = 0, j = 0, k = 0, cnt = 0;
+    int i = 0, k = 0;
 
     int *setVal = (int*) calloc(size, sizeof(int));
     int *setCnt = (int*) calloc(size, sizeof(int));
@@ -120,34 +130,93 @@ double calcKeyLengthProb(int *stream, int size) {
     double pr = 0.0;
 
     for (i = 0; i < size; i++) {
-        if (k > 0) {
-            j = 0;
-            while (j < k && stream[i] != setVal[j]) {
-                j++;
-            }
-            if (j < k) {
-                continue; //zise char olready counted
-            }
+        if (k > 0 && findElementInArray(setVal, k, stream[i]) < k) {
+            continue; //zise char olready counted
         }
         setVal[k] = stream[i];
-        cnt = 0;
-        for (j = 0; j < size; j++) {
-            if (stream[i] == stream[j]) {
-                cnt++;
-            }
-        }
-        setCnt[k] = cnt;
+        setCnt[k] = countElementInArray(stream, size, stream[i]);
         k++;
     }
-    print_int_array(setVal, k, "%c ", true);
-    print_int_array(setCnt, k, "%d ", true);
 
     for (i = 0; i < k; i++) {
-        pr += setCnt[i] * setCnt[i] / (size * size);
+        pr += (double) setCnt[i] * setCnt[i] / (size * size);
     }
     free(setVal);
     free(setCnt);
     return pr;
+}
+
+int defKeyLength(int *text, int cnt) {
+    int i = 0, j = 0, l = 0, hex = 0, k = 0;
+    double pr;
+    double *prSet = (double*) calloc(14, sizeof(double));
+    int *stream = (int*) calloc(cnt, sizeof(int));
+    for (l=1; l < 14; l++) {
+        for (hex = 0; hex < 256; hex++) {
+            k = -1;
+            for (i = 0; i < cnt / l; i++) {
+                stream[i] = text[i*l] ^ hex;
+                if (stream[i] < 32 || stream[i] > 127) {
+                    k = i;
+                    break;
+                }
+            }
+            if (k >= 0) {
+                continue;
+            }
+            //print_int_array(stream, cnt / l, "%3d ", false);
+            pr = calcKeyLengthProb(stream, cnt / l);
+            prSet[l] += pr;
+        }
+    }
+    pr = 0.0;
+    for (i = 1; i < 14; i++) {
+        if (prSet[i] > pr) {
+            pr = prSet[i];
+            l = i;
+        }
+    }
+    free(stream);
+    free(prSet);
+    return l;
+}
+
+void findKey(int *text, int cnt, int *key, int size) {
+    int i = 0, j = 0, l = 0, hex = 0, k = 0;
+    double pr;
+    double *prSet = (double*) calloc(256, sizeof(double));
+    int *stream = (int*) calloc(cnt / size, sizeof(int));
+
+    for (l = 0; l < size; l++) {
+        for (hex = 0; hex < 256; hex++) {
+            k = -1;
+            for (i = 0; i < cnt / size; i++) {
+                stream[i] = text[l * i + l] ^ hex;
+                if (stream[i] < 32 || stream[i] > 127) {
+                    k = i;
+                    break;
+                }
+            }
+            if (k >= 0) {
+                continue;
+            }
+            print_int_array(stream, cnt / size, "%3d ", false);
+            prSet[hex] = calcKeyBytes(stream, cnt / size);
+        }
+        pr = 0.0;
+        k = 0;
+        for (hex = 0; hex < 256; hex++) {
+            if (prSet[hex] > pr && prSet[hex] < 0.0665) {
+                pr = prSet[hex];
+                k = hex;
+            }
+        }
+        key[l] = k;
+    }
+    print_int_array(key, l, "%02X ", true);
+
+    free(stream);
+    free(prSet);
 }
 
 int main(int argc, char *argv[])
@@ -181,47 +250,11 @@ int main(int argc, char *argv[])
     print_int_array(text, cnt, "%3d ", true);
     print_int_array(text, cnt, "%02X ", true);
 
-    int l = 0, hex = 0, breakPos = 0;
-    double prSet[256], pr;
-    //pos = cnt;
-    int *stream = (int*) calloc(cnt, sizeof(int));
-    //int key[KEY_LENGTH];
-    for (l=1; l < 14; l++) {
-        for (i = 0; i < 256; i++) {
-            prSet[i] = 0.0;
-        }
-        for (hex = 0; hex < 256; hex++) {
-            breakPos = -1;
-            for (i = 0; i < cnt; i++) {
-                stream[i] = text[i*l] ^ hex;
-                if (stream[i] < 32 || stream[i] > 127) {
-                    breakPos = i;
-                    //printf("key byte %3d do not correct, over from print chars on %d position\n", hex, breakPos);
-                    break;
-                }
-                //printf("%3d ^ %3d = %3d (%c)\n", text[i], hex, stream[i], stream[i]);
-            }
-            if (breakPos >= 0) {
-                continue;
-            }
-            //printf("is hex looks good(%d): %4d\n", breakPos, hex);
-            //print_int_array(stream, pos, "%c ", true);
-            pr = calcKeyLengthProb(stream, cnt);
-            prSet[hex] = pr;
-            printf("%3d: %5.3f\n\n", hex, pr);
-        }
-        //double max = 0.0;
-        //for (i = 0; i < 256; i++) {
-        //    if (prSet[i] > max && prSet[i] < 0.068) {
-        //        max = prSet[i];
-        //        hex = i;
-        //    }
-        //}
-        //key[l] = hex;
-        print_double_array(prSet, 256, "%6.5f ", false);
-        //printf("%d - %3d[%02X]: %6.5f\n", l, hex, hex, max);
-    }
-    free(stream);
+    int l = defKeyLength(text, cnt);
+    int *key = (int*) calloc(l, sizeof(int));
+    findKey(text,cnt,key, l);
+    printf("\nUsed key:\n");
+    print_int_array(key, l, "%02X ", true);
 /*
     printf("\nUsed key:\n");
     print_int_array(key, KEY_LENGTH, "%02X ", true);
@@ -233,6 +266,7 @@ int main(int argc, char *argv[])
     }
     */
     free(text);
+    free(key);
     return 0;
 }
 //My answer was accepted and it has SHA1:
