@@ -109,12 +109,9 @@ double calcKeyBytes(int *stream, int size) {
     if (k == 0) {
         return 0.0;
     }
-    print_int_array(stream, size, "%3d ", false);
-    print_int_array(setCnt, size, "%3d ", false);
-    print_int_array(setVal, size, "%3c ", false);
     for (i = 0; i < k; i++) {
         pr += (double) setCnt[i] / cnt * alphabetFrequency[setVal[i]];
-        printf("%c[%3d]: %d / %d = %4.5f (%4.5f) - %5.5f\n", setVal[i], setVal[i], setCnt[i], cnt, (double) setCnt[i] / cnt, alphabetFrequency[setVal[i]], pr);
+        //printf("%c[%3d]: %d / %d = %4.5f (%4.5f) - %5.5f\n", setVal[i], setVal[i], setCnt[i], cnt, (double) setCnt[i] / cnt, alphabetFrequency[setVal[i]], pr);
     }
     free(setVal);
     free(setCnt);
@@ -144,6 +141,14 @@ double calcKeyLengthProb(int *stream, int size) {
     free(setVal);
     free(setCnt);
     return pr;
+}
+
+int getByteFromMask(int mask, int position) {
+    int i;
+    for (i = 0; i < position; i++) {
+        mask /= 2;
+    }
+    return mask;
 }
 
 int defKeyLength(int *text, int cnt) {
@@ -182,7 +187,7 @@ int defKeyLength(int *text, int cnt) {
 }
 
 void findKey(int *text, int cnt, int *key, int size) {
-    int i = 0, j = 0, l = 0, hex = 0, k = 0;
+    int i = 0, l = 0, hex = 0, k = 0;
     double pr;
     double *prSet = (double*) calloc(256, sizeof(double));
     int *stream = (int*) calloc(cnt / size, sizeof(int));
@@ -190,30 +195,37 @@ void findKey(int *text, int cnt, int *key, int size) {
     for (l = 0; l < size; l++) {
         for (hex = 0; hex < 256; hex++) {
             k = -1;
-            for (i = 0; i < cnt / size; i++) {
-                stream[i] = text[l * i + l] ^ hex;
+            prSet[hex] = 0.0;
+            i = 0;
+            while (i * size + l <= cnt) {
+                stream[i] = text[l + i * size] ^ hex;
                 if (stream[i] < 32 || stream[i] > 127) {
-                    k = i;
+                    k = i++;
                     break;
                 }
+                i++;
             }
             if (k >= 0) {
                 continue;
             }
-            print_int_array(stream, cnt / size, "%3d ", false);
             prSet[hex] = calcKeyBytes(stream, cnt / size);
         }
         pr = 0.0;
         k = 0;
+        printf("\nfor byte %d more probability are:\n", l);
         for (hex = 0; hex < 256; hex++) {
-            if (prSet[hex] > pr && prSet[hex] < 0.0665) {
+            //if (prSet[hex] > pr && prSet[hex] < 0.0745) {
+            if (prSet[hex] > pr) {
                 pr = prSet[hex];
+                if (pr > 0.058) {
+                    printf("%3d (%6.5f) ", hex, pr);
+                }
                 k = hex;
+                i = 256;
             }
         }
         key[l] = k;
     }
-    print_int_array(key, l, "%02X ", true);
 
     free(stream);
     free(prSet);
@@ -252,19 +264,17 @@ int main(int argc, char *argv[])
 
     int l = defKeyLength(text, cnt);
     int *key = (int*) calloc(l, sizeof(int));
-    findKey(text,cnt,key, l);
+    findKey(text,cnt,key,l);
     printf("\nUsed key:\n");
     print_int_array(key, l, "%02X ", true);
-/*
-    printf("\nUsed key:\n");
-    print_int_array(key, KEY_LENGTH, "%02X ", true);
-    printf("\nDecrypted text:\n");
-    char ch;
+    print_int_array(key, l, "%3d ", true);
+
     for (i=0; i < cnt; i++) {
-        ch = text[i] ^ key[i % KEY_LENGTH];
-        printf("%c", ch);
+        text[i] = text[i] ^ key[i % l];
     }
-    */
+    printf("\nDecrypted text:\n");
+    print_int_array(text, cnt, "%c", true);
+    print_int_array(text, cnt, "%3d ", true);
     free(text);
     free(key);
     return 0;
